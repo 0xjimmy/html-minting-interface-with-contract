@@ -854,7 +854,8 @@ const HASH = (string) => {
 }
 
 class MintingBox {
-  constructor(address, privateList_) {
+  constructor(address, chainID, privateList_) {
+    this.configChainID = chainID
     this.privateList = privateList_.split(',').filter(good => good ? true : false).map(x => ethers.utils.getAddress(x))
 
     this.titleComponent = document.querySelector('.mintTitle')
@@ -914,7 +915,7 @@ class MintingBox {
         await this.fetchAccountData()
       } else {
         await this.fetchAccountData()
-        if (this.selectedAccount && this.chainId === 31337) {
+        if (this.selectedAccount && this.chainId === this.configChainID) {
           const userContract = this.contract.connect(this.accountProvider.getSigner())
           if (this.mintStatus === 1) {
             userContract.privateMint(ethers.BigNumber.from(this.amountButton.innerText), this.proof, this.leaf, { value: this.priceInWei.mul(this.amountButton.innerText) }).then(tx => tx.wait(1)).then(() => this.fetchAccountData)
@@ -967,7 +968,7 @@ class MintingBox {
   }
 
   updateUI() {
-    if (this.selectedAccount && this.chainId !== 31337) {
+    if (this.selectedAccount && this.chainId !== this.configChainID) {
       this.mintButton.innerText = "Switch to Ethereum Mainnet"
     } else if (!this.selectedAccount) {
       this.mintButton.innerText = `Connect Wallet`
@@ -982,6 +983,7 @@ class MintingBox {
 }
     new MintingBox(
       "0x5FbDB2315678afecb367f032d93F642f64180aa3", // Contract address
+      1, // chainID
       // Private sale addresses, comma seperated
       "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266,0x08d19746Ee0c0833FC5EAF98181eB91DAEEb9abB"
     );
