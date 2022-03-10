@@ -911,12 +911,17 @@ class MintingBox {
             this.accountProvider = null
           }
         }
+          console.log('HIT')
         await sync();
         await this.fetchAccountData()
+          console.log('HIT')
       } else {
         await this.fetchAccountData()
+          console.log('HIT')
         if (this.selectedAccount && this.chainId === this.configChainID) {
-          const userContract = this.contract.connect(this.accountProvider.getSigner())
+          console.log('HIT', this.mintStatus)
+          const userContractprovider = this.contract.connect(this.accountProvider)
+          const userContract = userContractprovider.connect(this.accountProvider.getSigner())
           if (this.mintStatus === 1) {
             userContract.privateMint(ethers.BigNumber.from(this.amountButton.innerText), this.proof, this.leaf, { value: this.priceInWei.mul(this.amountButton.innerText) }).then(tx => tx.wait(1)).then(() => this.fetchAccountData)
           }
@@ -940,7 +945,7 @@ class MintingBox {
     const [mintedAmount, maxSupply] = await Promise.all([this.contract.totalSupply(), this.contract.MAX_SUPPLY()])
     this.remainingCount.innerText = `${mintedAmount.toString()}/${maxSupply.toString()}`
     const [startedAllowlist, startedPublic] = await Promise.all([this.contract.startPrivateSale(), this.contract.startPublicSale()])
-    this.mintStatus = startedAllowlist ? (startedPublic ? 2 : 1) : 0
+    this.mintStatus = startedPublic ? 2 : (startedAllowlist ? 1 : 0)
     const [publicPrice, privatePrice, privateMax, publicMax] = await Promise.all([this.contract.publicPrice(), this.contract.privatePrice(), this.contract.maxPrivateMints(), this.contract.maxPublicMints()])
     this.maxSet = this.mintStatus === 1 ? Number(privateMax.toString()) : Number(publicMax.toString())
     if (Number(this.amountButton.innerText) > this.maxSet) this.amountButton.innerText = this.maxSet
