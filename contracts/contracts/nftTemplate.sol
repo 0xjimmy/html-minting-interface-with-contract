@@ -739,7 +739,7 @@ contract NFTContract is ERC721A, Ownable, IERC2981 {
 
     function royaltyInfo(uint256 _tokenId, uint256 _salePrice) external override view returns (address receiver, uint256 royaltyAmount) {
       receiver = owner();
-      royaltyAmount = (_salePrice * _royaltyAmount) / 1000;
+      royaltyAmount = (_salePrice * _royaltyAmount) / 10000;
     }
 
     function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721A) returns (bool) {
