@@ -31,6 +31,29 @@ error TransferToNonERC721ReceiverImplementer();
 error TransferToZeroAddress();
 error URIQueryForNonexistentToken();
 
+interface IERC2981 {
+    /// ERC165 bytes to add to interface array - set in parent contract
+    /// implementing this standard
+    ///
+    /// bytes4(keccak256("royaltyInfo(uint256,uint256)")) == 0x2a55205a
+    /// bytes4 private constant _INTERFACE_ID_ERC2981 = 0x2a55205a;
+    /// _registerInterface(_INTERFACE_ID_ERC2981);
+
+    /// @notice Called with the sale price to determine how much royalty
+    //          is owed and to whom.
+    /// @param _tokenId - the NFT asset queried for royalty information
+    /// @param _salePrice - the sale price of the NFT asset specified by _tokenId
+    /// @return receiver - address of who should be sent the royalty payment
+    /// @return royaltyAmount - the royalty payment amount for _salePrice
+    function royaltyInfo(
+        uint256 _tokenId,
+        uint256 _salePrice
+    ) external view returns (
+        address receiver,
+        uint256 royaltyAmount
+    );
+}
+
 contract ERC721A is Context, ERC165, IERC721, IERC721Metadata {
     using Address for address;
     using Strings for uint256;
@@ -604,7 +627,7 @@ contract ERC721A is Context, ERC165, IERC721, IERC721Metadata {
     ) internal virtual {}
 }
 
-contract NFTContract is ERC721A, Ownable {
+contract NFTContract is ERC721A, Ownable, IERC2981 {
     bytes32 public merkleRoot;
 
     string private base;
@@ -706,4 +729,21 @@ contract NFTContract is ERC721A, Ownable {
     function _baseURI() internal view override returns (string memory) {
         return base;
     }
+
+
+    uint256 private _royaltyAmount;
+    function setRoyaltyAmount(uint256 bps) external onlyOwner {
+      require(bps <= 10000, "More than 100%");
+      _royaltyAmount = bps;
+    }
+
+    function royaltyInfo(uint256 _tokenId, uint256 _salePrice) external override view returns (address receiver, uint256 royaltyAmount) {
+      receiver = owner();
+      royaltyAmount = (_salePrice * _royaltyAmount) / 1000;
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view virtual override(ERC721A) returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
+    }
+
 }
