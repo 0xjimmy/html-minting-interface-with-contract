@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.16;
 
 import '@openzeppelin/contracts/token/ERC721/IERC721.sol';
 import '@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol';
@@ -629,101 +629,92 @@ contract ERC721A is Context, ERC165, IERC721, IERC721Metadata {
 
 contract NFTContract is ERC721A, Ownable, IERC2981 {
     bytes32 public merkleRoot;
-
     string private base;
-    uint256 public MAX_SUPPLY;
-    uint256 public publicPrice;
+    uint256 public maxSupply;
+
     uint256 public privatePrice;
-    uint256 public maxPublicMints;
-    uint256 public maxPrivateMints;
+    uint256 public publicPrice;
+
+    uint128 public privateMintsPerWallet;
+    uint128 public publicMintsPerWallet;
+
+    mapping(address => uint128) public privateMints;
+    mapping(address => uint128) public publicMints;
     
-    bool public startPrivateSale;
-    bool public startPublicSale;
+    bool public privateSaleStatus;
+    bool public publicSaleStatus;
     
-    constructor(string memory name, string memory symbol, uint256 maxSupply, uint256 privatePriceInWei, uint256 publicPriceInWei, uint256 maxPrivateMint, uint256 maxPublicMint) ERC721A(name, symbol) {
-      MAX_SUPPLY = maxSupply;
-      publicPrice = publicPriceInWei;
-      privatePrice = privatePriceInWei;
-      maxPublicMints = maxPublicMint;
-      maxPrivateMints = maxPrivateMint;
+    constructor(string memory name, string memory symbol, uint256 _maxSupply, uint256 _privatePrice, uint256 _publicPrice, uint128 _privateMintsPerWallet, uint128 _publicMintsPerWallet) ERC721A(name, symbol) {
+      maxSupply = _maxSupply;
+      privatePrice = _privatePrice;
+      publicPrice = _publicPrice;
+      privateMintsPerWallet = _privateMintsPerWallet;
+      publicMintsPerWallet = _publicMintsPerWallet;
     }
 
     function setBaseURI(string memory baseURI) public onlyOwner {
         base = baseURI;
     }
 
-    function setAllowListMerkleRoot(bytes32 root) external onlyOwner {
+    function setMerkleRoot(bytes32 root) external onlyOwner {
         merkleRoot = root;
     }
 
     function togglePublicSale() external onlyOwner {
-        startPublicSale = !startPublicSale;
+       publicSaleStatus = !publicSaleStatus;
+    }
+    
+    function togglePrivateSale() external onlyOwner {
+       privateSaleStatus = !privateSaleStatus;
     }
 
-    function setMaxPublicMints(uint256 _maxPublicMints) external onlyOwner {
-        maxPublicMints = _maxPublicMints;
+    function setPublicMintsPerWallet(uint128 amount) external onlyOwner {
+      publicMintsPerWallet = amount;
+    }
+    
+    function setPrivateMintsPerWallet(uint128 amount) external onlyOwner {
+      privateMintsPerWallet = amount;
     }
 
-    modifier mintCompliance(uint256 amount) {
-        unchecked {
-            require(_totalMinted() + amount <= MAX_SUPPLY, "max supply");
-        }
-        if (startPublicSale) {
-          require(msg.value >= publicPrice*amount, "wrong price");
+    function setPrivatePrice(uint256 price) external onlyOwner {
+       privatePrice  = price;
+    }
+    
+    function setPublicPrice(uint256 price) external onlyOwner {
+      publicPrice = price;
+    }
+
+    modifier mintCompliance(uint256 amount, bool pub) {
+        if (pub) {
+          require(publicSaleStatus, "Minting is paused");
+          require(msg.value >= publicPrice * amount, "wrong price");
+          require(publicMints[msg.sender] + amount <= publicMintsPerWallet, "Minted too many");
+          publicMints[msg.sender] = publicMints[msg.sender] + uint128(amount);
         } else {
-          require(msg.value >= privatePrice*amount, "wrong price");
+          require(privateSaleStatus, "Minting is paused");
+          require(msg.value >= privatePrice * amount, "wrong price");
+          require(privateMints[msg.sender] + amount <= privateMintsPerWallet, "Minted too many");
+          privateMints[msg.sender] = privateMints[msg.sender] + uint128(amount);
+        }
+        unchecked {
+            require(_totalMinted() + amount <= maxSupply, "max supply");
         }
 
         _;
     }
     
-    function mint(uint256 amount) external payable mintCompliance(amount) {
-        require(startPublicSale, "Minting is paused");
-        require(amount <= maxPublicMints, "max amount");
+    function mint(uint256 amount) external payable mintCompliance(amount, true) {
         require(msg.sender == tx.origin, "no bots");
         _mint(msg.sender, amount, "", false);
     }
 
-    function privateMint(uint64 amount, bytes32[] memory proof, bytes32 leaf) external payable mintCompliance(amount) {
-        require(startPrivateSale, "Minting hasn't started");
+    function privateMint(uint64 amount, bytes32[] memory proof, bytes32 leaf) external payable mintCompliance(amount, false) {
         require(MerkleProof.verify(proof, merkleRoot, leaf), "Not allowed to mint");
-        unchecked {
-            uint64 numPrivateMinted = _getAux(msg.sender) + amount;
-            require(numPrivateMinted <= maxPrivateMints, "max private mint amount");
-            _setAux(msg.sender, numPrivateMinted);
-        }
         _mint(msg.sender, amount, "", false);
-    }
-
-    function getPrivateMinted(address _address) external view returns (uint64) {
-        return _getAux(_address);
-    }
-
-    function reserveAndStart(uint256 amount) external onlyOwner {
-        require(!startPrivateSale, "Reserve redeemed");
-        require(amount <= MAX_SUPPLY, "Not enough supply");
-        startPrivateSale = true;
-        if (amount > 0) {
-            _mint(msg.sender, amount, "", false);
-        }
-    }
-
-    function setPrice(uint256 _price) external onlyOwner {
-        publicPrice = _price;
-    }
-    
-    function setPrivatePrice(uint256 _price) external onlyOwner {
-        privatePrice = _price;
     }
 
     function withdraw() public payable onlyOwner {
         require(payable(msg.sender).send(address(this).balance));
-    }
-
-    function burnSupply(uint256 newSupply) external onlyOwner {
-        require(newSupply < MAX_SUPPLY, "newSupply too high");
-        require(newSupply > _totalMinted(), "newSupply too low");
-        MAX_SUPPLY = newSupply;
     }
 
     function _baseURI() internal view override returns (string memory) {
@@ -731,10 +722,13 @@ contract NFTContract is ERC721A, Ownable, IERC2981 {
     }
 
 
+    // Royalties
+
     uint256 private _royaltyAmount;
-    function setRoyaltyAmount(uint256 bps) external onlyOwner {
-      require(bps <= 10000, "More than 100%");
-      _royaltyAmount = bps;
+
+    function setRoyaltyAmount(uint256 basisPoints) external onlyOwner {
+      require(basisPoints <= 10000, "More than 100%");
+      _royaltyAmount = basisPoints;
     }
 
     function royaltyInfo(uint256 _tokenId, uint256 _salePrice) external override view returns (address receiver, uint256 royaltyAmount) {
